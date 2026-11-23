@@ -79,8 +79,12 @@
   .tx-date{font-size:11px;color:var(--muted);margin-top:2px}
   .tx-amount{font-weight:900;font-size:13px;white-space:nowrap}
   .tx-amount.in{color:var(--accent2)} .tx-amount.out{color:var(--red)} .tx-amount.tr{color:var(--blue)}
-  .tx-del{border:none;background:#fef2f2;color:#ef4444;width:30px;height:30px;border-radius:10px;cursor:pointer;font-size:13px;flex-shrink:0}
+  .tx-actions,.account-actions{display:flex;align-items:center;gap:5px;flex-shrink:0}
+  .tx-del,.tx-edit{border:none;width:30px;height:30px;border-radius:10px;cursor:pointer;font-size:13px;flex-shrink:0}
+  .tx-del{background:#fef2f2;color:#ef4444}
+  .tx-edit{background:#f1edff;color:#6244c7}
   body.dark .tx-del{background:#450a0a}
+  body.dark .tx-edit{background:#30234f;color:#c4b5fd}
   .empty{text-align:center;padding:26px 10px;color:var(--muted);font-size:13px;line-height:1.8}
   .empty .big{font-size:40px;margin-bottom:6px}
   .chart-wrap{display:flex;align-items:center;gap:14px}
@@ -875,18 +879,18 @@
   <div class="field"><label>دسته‌بندی</label><div class="cat-grid" id="catGrid"></div><button type="button" class="cat-add-inline" onclick="openCategoryModal(txType)">＋ افزودن دسته‌بندی دلخواه</button></div>
   <div class="field"><label>حساب</label><select id="txAccount"></select></div>
   <div class="field"><label>تاریخ (شمسی)</label><input type="hidden" id="txDate"><button type="button" class="jalali-date" id="txDateFa" onclick="openJalaliPicker('txDate')"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M7 3v4m10-4v4M3 10h18"/></svg><span>انتخاب تاریخ شمسی</span><b>‹</b></button></div>
-  <button class="btn-primary" onclick="saveTransaction()">ثبت تراکنش ✓</button>
+  <button class="btn-primary" id="txSaveButton" onclick="saveTransaction()">ثبت تراکنش ✓</button>
   <button class="btn-secondary" onclick="closeModal('txModal')">انصراف</button>
 </div></div>
 
 <!-- ACCOUNT MODAL -->
 <div class="modal-overlay" id="accountModal"><div class="modal">
-  <h3>👛 حساب جدید</h3>
+  <h3 id="accountModalTitle">👛 حساب جدید</h3>
   <div class="field"><label for="accType">نوع حساب</label><select id="accType" onchange="renderAccountTypeFields()"><option value="bank">💳 حساب / کارت بانکی</option><option value="cash">💵 نقدی</option><option value="savings">🏦 پس‌انداز</option><option value="digital">📱 کیف پول دیجیتال</option><option value="credit">💳 اعتباری</option><option value="other">📦 سایر</option></select></div>
   <div id="accountTypeFields"></div>
   <datalist id="iranianBankOptions"></datalist>
   <div class="field"><label for="accInitial">موجودی اولیه (تومان)</label><input type="text" class="money-input" id="accInitial" inputmode="numeric" oninput="formatMoneyInput(this)" placeholder="۰"></div>
-  <button class="btn-primary" onclick="saveAccount()">ثبت حساب ✓</button>
+  <button class="btn-primary" id="accountSaveButton" onclick="saveAccount()">ثبت حساب ✓</button>
   <button class="btn-secondary" onclick="closeModal('accountModal')">انصراف</button>
 </div></div>
 
@@ -1063,6 +1067,7 @@ function normalizeCustomCategoryColors(){ if(Array.isArray(state.customCats))sta
 
 let state = null;
 let currentFilter='all', txType='out', selectedCat='food';
+let editingTxId=null, editingAccountId=null;
 let activeAccountCarouselIndex=0, accountCarouselStartX=null, accountCarouselGesture=null, accountCarouselTransitionTimer=null;
 let debtType='lend', chequeType='in', chequeFilter='all';
 let activeObligationTab='loans', installmentFilter='all';
@@ -1247,10 +1252,10 @@ function nextInstallmentDate(inst){
 function txHTML(t){
   if(t.type==='transfer'){
     const from=accById(t.fromId), to=accById(t.toId);
-    return `<div class="tx"><div class="tx-icon" style="background:#eff6ff">🔁</div><div class="tx-info"><div class="tx-title">انتقال: ${escapeHtml(from?from.name:'؟')} ← ${escapeHtml(to?to.name:'؟')}</div><div class="tx-date">${faDateShort(t.date)}</div></div><div class="tx-amount tr">${fmt(t.amount)}</div><button class="tx-del" onclick="deleteTx(${t.id})">🗑️</button></div>`;
+    return `<div class="tx"><div class="tx-icon" style="background:#eff6ff">🔁</div><div class="tx-info"><div class="tx-title">انتقال: ${escapeHtml(from?from.name:'؟')} ← ${escapeHtml(to?to.name:'؟')}</div><div class="tx-date">${faDateShort(t.date)}</div></div><div class="tx-amount tr">${fmt(t.amount)}</div><div class="tx-actions"><button class="tx-edit" aria-label="ویرایش انتقال" onclick="editTransaction(${t.id})">✏️</button><button class="tx-del" aria-label="حذف انتقال" onclick="deleteTx(${t.id})">🗑️</button></div></div>`;
   }
   const c=catById(t.cat); const acc=accById(t.accountId); const isIn=t.type==='in';
-  return `<div class="tx"><div class="tx-icon" style="background:${c.bg}">${c.i}</div><div class="tx-info"><div class="tx-title">${escapeHtml(t.title||c.t)}</div><div class="tx-date">${c.t} • ${faDateShort(t.date)}${acc?' • '+escapeHtml(acc.name):''}</div></div><div class="tx-amount ${isIn?'in':'out'}">${isIn?'+':'−'} ${fmt(t.amount)}</div><button class="tx-del" onclick="deleteTx(${t.id})">🗑️</button></div>`;
+  return `<div class="tx"><div class="tx-icon" style="background:${c.bg}">${c.i}</div><div class="tx-info"><div class="tx-title">${escapeHtml(t.title||c.t)}</div><div class="tx-date">${c.t} • ${faDateShort(t.date)}${acc?' • '+escapeHtml(acc.name):''}</div></div><div class="tx-amount ${isIn?'in':'out'}">${isIn?'+':'−'} ${fmt(t.amount)}</div><div class="tx-actions"><button class="tx-edit" aria-label="ویرایش تراکنش" onclick="editTransaction(${t.id})">✏️</button><button class="tx-del" aria-label="حذف تراکنش" onclick="deleteTx(${t.id})">🗑️</button></div></div>`;
 }
 
 function renderDashboard(){
@@ -1307,11 +1312,11 @@ function renderAccounts(){
   document.getElementById('accountsList').innerHTML=state.accounts.length?state.accounts.map((a,i)=>{
     const bal=accountBalance(a.id);
     const bank=(a.type==='bank'||a.type==='credit')?bankForAccount(a):null;
-    return bank?`<div class="card account-detail-card account-bank-detail" style="margin-bottom:11px"><div class="account-bank-card-wrap">${bankCardFace(bank,a.cardNumber||'',a.last4,a.holderName||currentAccount?.name||'',a)}</div><div class="account-detail-meta"><div><b style="font-size:14px">${escapeHtml(a.name)}</b><div style="font-size:11px;color:var(--muted);margin-top:2px">موجودی اولیه: ${fmt(a.initial)} تومان</div></div><div style="text-align:left"><div style="font-weight:900;font-size:14px;color:${bal>=0?'#159b7d':'#d74a65'}">${fmt(bal)}</div><div style="font-size:10px;color:var(--muted)">تومان</div></div><button class="tx-del" onclick="deleteAccount(${a.id})">🗑️</button></div></div>`:`<div class="card account-detail-card" style="margin-bottom:11px;display:flex;align-items:center;gap:12px">
+    return bank?`<div class="card account-detail-card account-bank-detail" style="margin-bottom:11px"><div class="account-bank-card-wrap">${bankCardFace(bank,a.cardNumber||'',a.last4,a.holderName||currentAccount?.name||'',a)}</div><div class="account-detail-meta"><div><b style="font-size:14px">${escapeHtml(a.name)}</b><div style="font-size:11px;color:var(--muted);margin-top:2px">موجودی اولیه: ${fmt(a.initial)} تومان</div></div><div style="text-align:left"><div style="font-weight:900;font-size:14px;color:${bal>=0?'#159b7d':'#d74a65'}">${fmt(bal)}</div><div style="font-size:10px;color:var(--muted)">تومان</div></div><div class="account-actions"><button class="tx-edit" aria-label="ویرایش حساب" onclick="editAccount(${a.id})">✏️</button><button class="tx-del" aria-label="حذف حساب" onclick="deleteAccount(${a.id})">🗑️</button></div></div></div>`:`<div class="card account-detail-card" style="margin-bottom:11px;display:flex;align-items:center;gap:12px">
       <div class="tx-icon" style="background:${ACC_COLORS[i%ACC_COLORS.length]};color:#fff;font-size:20px">${accountIconHTML(a)}</div>
       <div style="flex:1"><b style="font-size:14px">${escapeHtml(a.name)}</b><div style="font-size:11px;color:var(--muted);margin-top:2px">${a.bankName?escapeHtml(a.bankName)+' • ':''}موجودی اولیه: ${fmt(a.initial)} تومان</div></div>
       <div style="text-align:left"><div style="font-weight:900;font-size:14px;color:${bal>=0?'#159b7d':'#d74a65'}">${fmt(bal)}</div><div style="font-size:10px;color:var(--muted)">تومان</div></div>
-      <button class="tx-del" onclick="deleteAccount(${a.id})">🗑️</button>
+      <div class="account-actions"><button class="tx-edit" aria-label="ویرایش حساب" onclick="editAccount(${a.id})">✏️</button><button class="tx-del" aria-label="حذف حساب" onclick="deleteAccount(${a.id})">🗑️</button></div>
     </div>`;
   }).join(''):`<div class="card empty"><div class="big">👛</div>هنوز حسابی اضافه نکردی.<br><button class="btn-primary" style="margin-top:12px" onclick="openAccountModal()">＋ افزودن اولین حساب</button></div>`;
   const opts=state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
@@ -1572,6 +1577,7 @@ function openQuickActionMenu(){document.getElementById('quickActionModal').class
 function runQuickAction(action){closeModal('quickActionModal');if(action==='out'||action==='in')openAddModal(action);else if(action==='transfer')openTransferModal();else if(action==='sms')openSmsModal();}
 function openAddModal(type){
   if(!state.accounts.length){ toast('اول یک حساب اضافه کن'); openAccountModal(); return; }
+  editingTxId=null;document.getElementById('txSaveButton').textContent='ثبت تراکنش ✓';document.querySelector('#txModal .sms-import-btn').style.display='';
   txType=type||'out';
   document.getElementById('txModal').classList.add('open');
   document.getElementById('txAmount').value=''; document.getElementById('txTitle').value='';
@@ -1579,9 +1585,18 @@ function openAddModal(type){
   document.getElementById('txAccount').innerHTML=accountOptions(state.accounts[0]?state.accounts[0].id:null);
   setTxType(txType);
 }
-function setTxType(type){ txType=type; document.getElementById('btnOut').classList.toggle('active',type==='out'); document.getElementById('btnIn').classList.toggle('active',type==='in'); const toggle=document.getElementById('transactionTypeToggle');toggle.classList.toggle('is-expense',type==='out');toggle.classList.toggle('is-income',type==='in');document.getElementById('txModalTitle').textContent=type==='out'?'🔴 ثبت هزینه':'🟢 ثبت درآمد'; selectedCat=type==='out'?'food':'salary'; renderCatGrid(); }
+function setTxType(type){ txType=type; document.getElementById('btnOut').classList.toggle('active',type==='out'); document.getElementById('btnIn').classList.toggle('active',type==='in'); const toggle=document.getElementById('transactionTypeToggle');toggle.classList.toggle('is-expense',type==='out');toggle.classList.toggle('is-income',type==='in');document.getElementById('txModalTitle').textContent=editingTxId?(type==='out'?'✏️ ویرایش هزینه':'✏️ ویرایش درآمد'):(type==='out'?'🔴 ثبت هزینه':'🟢 ثبت درآمد'); selectedCat=type==='out'?'food':'salary'; renderCatGrid(); }
 function renderCatGrid(){ const cats=catsByType(txType); document.getElementById('catGrid').innerHTML=cats.map(c=>`<button class="cat-btn ${c.id===selectedCat?'selected':''}" onclick="selectCat('${c.id}')"><span class="ci">${c.i}</span>${c.t}</button>`).join(''); }
 function selectCat(id){ selectedCat=id; renderCatGrid(); }
+function editTransaction(id){
+  const t=state.txs.find(x=>x.id===id);if(!t)return;
+  if(t.type==='transfer'){openEditTransfer(t);return;}
+  editingTxId=t.id;txType=t.type==='in'?'in':'out';
+  document.getElementById('txAmount').value=fmt(t.amount);document.getElementById('txTitle').value=t.title||'';
+  document.getElementById('txAccount').innerHTML=accountOptions(t.accountId);document.getElementById('txAccount').value=String(t.accountId);
+  setDateValue('txDate',t.date||todayStr());setTxType(txType);selectedCat=t.cat|| (txType==='out'?'food':'salary');renderCatGrid();
+  document.getElementById('txSaveButton').textContent='ذخیرهٔ تغییرات ✓';document.querySelector('#txModal .sms-import-btn').style.display='none';document.getElementById('txModal').classList.add('open');
+}
 function saveTransaction(){
   if(!state.accounts.length){ toast('اول یک حساب اضافه کن'); openAccountModal(); return; }
   const amount=readMoney('txAmount');
@@ -1590,8 +1605,9 @@ function saveTransaction(){
   const accountId=Number(document.getElementById('txAccount').value);
   if(!Number.isFinite(accountId)){ toast('⚠️ یک حساب انتخاب کن'); return; }
   if(!amount||amount<=0){ toast('⚠️ مبلغ را وارد کنید'); return; }
-  state.txs.push({id:uid(),type:txType,amount,title:title||catById(selectedCat).t,cat:selectedCat,date,accountId});
-  save(); closeModal('txModal'); renderAll(); toast(txType==='out'?'✅ هزینه ثبت شد':'✅ درآمد ثبت شد');
+  const fields={type:txType,amount,title:title||catById(selectedCat).t,cat:selectedCat,date,accountId};
+  if(editingTxId){state.txs=state.txs.map(t=>t.id===editingTxId?{...t,...fields}:t);}else state.txs.push({id:uid(),...fields});
+  const wasEditing=!!editingTxId;editingTxId=null;save();closeModal('txModal');renderAll();toast(wasEditing?'✏️ تغییرات ذخیره شد':(txType==='out'?'✅ هزینه ثبت شد':'✅ درآمد ثبت شد'));
 }
 function deleteTx(id){ if(!confirm('این تراکنش حذف شود؟')) return; state.txs=state.txs.filter(t=>t.id!==id); save(); renderAll(); toast('🗑️ حذف شد'); }
 
@@ -1610,7 +1626,15 @@ function renderAccountTypeFields(){
   else el.innerHTML=accountNameField('نام حساب','مثلاً حساب سرمایه‌گذاری',false)+`<div class="field"><label for="accOtherNote">توضیح (اختیاری)</label><input type="text" id="accOtherNote" placeholder="جزئیات حساب"></div>`;
   fillIranianBankOptions();
 }
-function openAccountModal(){document.getElementById('accType').value='bank';document.getElementById('accInitial').value='';renderAccountTypeFields();document.getElementById('accountModal').classList.add('open');}
+function openAccountModal(){editingAccountId=null;document.getElementById('accountModalTitle').textContent='👛 حساب جدید';document.getElementById('accountSaveButton').textContent='ثبت حساب ✓';document.getElementById('accType').value='bank';document.getElementById('accInitial').value='';renderAccountTypeFields();document.getElementById('accountModal').classList.add('open');}
+function editAccount(id){
+  const a=accById(id);if(!a)return;editingAccountId=a.id;
+  document.getElementById('accType').value=a.type||'other';renderAccountTypeFields();
+  const put=(id,value)=>{const el=document.getElementById(id);if(el)el.value=value??'';};
+  put('accInitial',fmt(a.initial||0));put('accName',a.name||'');put('accBankName',a.bankName||'');put('accCardNumber',a.cardNumber||'');put('accHolderName',a.holderName||'');put('accProvider',a.providerName||'');put('accOtherNote',a.note||'');
+  const card=document.getElementById('accCardNumber');if(card)formatCardNumber(card);if(a.bankName)updateBankLogo(a.bankName);
+  document.getElementById('accountModalTitle').textContent='✏️ ویرایش حساب';document.getElementById('accountSaveButton').textContent='ذخیرهٔ تغییرات ✓';document.getElementById('accountModal').classList.add('open');
+}
 function saveAccount(){
   const type=document.getElementById('accType').value,initial=readMoney('accInitial');
   const rawName=document.getElementById('accName')?.value.trim()||'';
@@ -1629,8 +1653,10 @@ function saveAccount(){
   if(!name&&bank)name=bank.fa+(type==='credit'?' • اعتباری':last4?' •••• '+last4:'');
   if(!name&&type==='digital')name=providerName;
   if(!name){toast('⚠️ نام حساب را وارد کن');return;}
-  state.accounts.push({id:uid(),name,type,initial,bankName:bank?bank.fa:'',bankId:bank?bank.id:'',cardNumber:(type==='bank'||type==='credit')?cardNumber:'',last4:(type==='bank'||type==='credit')?last4:'',holderName:(type==='bank'||type==='credit')?holderName:'',providerName:type==='digital'?providerName:'',note:otherNote});
-  activeAccountCarouselIndex=state.accounts.length-1;save();closeModal('accountModal');renderAll();toast('👛 حساب اضافه شد');
+  const existing=editingAccountId?accById(editingAccountId):null;
+  const record={...(existing||{}),id:existing?existing.id:uid(),name,type,initial,bankName:bank?bank.fa:'',bankId:bank?bank.id:'',cardNumber:(type==='bank'||type==='credit')?cardNumber:'',last4:(type==='bank'||type==='credit')?last4:'',holderName:(type==='bank'||type==='credit')?holderName:'',providerName:type==='digital'?providerName:'',note:otherNote};
+  if(existing)state.accounts=state.accounts.map(a=>a.id===existing.id?record:a);else{state.accounts.push(record);activeAccountCarouselIndex=state.accounts.length-1;}
+  const wasEditing=!!existing;editingAccountId=null;save();closeModal('accountModal');renderAll();toast(wasEditing?'✏️ تغییرات حساب ذخیره شد':'👛 حساب اضافه شد');
 }
 function deleteAccount(id){ if(!confirm('این حساب حذف شود؟ تراکنش‌هایش به حساب اول منتقل می‌شود.')) return;
   const first=state.accounts.find(a=>a.id!==id);
@@ -1638,19 +1664,26 @@ function deleteAccount(id){ if(!confirm('این حساب حذف شود؟ ترا�
   state.accounts=state.accounts.filter(a=>a.id!==id);activeAccountCarouselIndex=Math.min(activeAccountCarouselIndex,Math.max(0,state.accounts.length-1));save();renderAll();toast('🗑️ حساب حذف شد');
 }
 function openTransferModal(){
+  editingTxId=null;document.querySelector('#transferModal .btn-primary').textContent='انجام انتقال ✓';
   if(state.accounts.length<2){ toast('⚠️ حداقل ۲ حساب لازم است'); return; }
   document.getElementById('trFrom').innerHTML=state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
   document.getElementById('trTo').innerHTML=state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
   document.getElementById('trTo').selectedIndex=1; document.getElementById('trAmount').value=''; setDateValue('trDate',todayStr());
   document.getElementById('transferModal').classList.add('open');
 }
+function openEditTransfer(t){
+  if(state.accounts.length<2){toast('⚠️ برای ویرایش انتقال باید دست‌کم دو حساب داشته باشی');return;}
+  editingTxId=t.id;document.getElementById('trFrom').innerHTML=state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');document.getElementById('trTo').innerHTML=state.accounts.map(a=>`<option value="${a.id}">${escapeHtml(a.name)}</option>`).join('');
+  document.getElementById('trFrom').value=String(t.fromId);document.getElementById('trTo').value=String(t.toId);document.getElementById('trAmount').value=fmt(t.amount);setDateValue('trDate',t.date||todayStr());document.querySelector('#transferModal h3').textContent='✏️ ویرایش انتقال';document.querySelector('#transferModal .btn-primary').textContent='ذخیرهٔ تغییرات ✓';document.getElementById('transferModal').classList.add('open');
+}
 function saveTransfer(){
   const fromId=Number(document.getElementById('trFrom').value), toId=Number(document.getElementById('trTo').value);
   const amount=readMoney('trAmount'); const date=document.getElementById('trDate').value||todayStr();
   if(fromId===toId){ toast('⚠️ دو حساب نمی‌توانند یکی باشند'); return; }
   if(!amount||amount<=0){ toast('⚠️ مبلغ را وارد کنید'); return; }
-  state.txs.push({id:uid(),type:'transfer',amount,fromId,toId,date,title:'انتقال'});
-  save(); closeModal('transferModal'); renderAll(); toast('🔁 انتقال انجام شد');
+  const fields={type:'transfer',amount,fromId,toId,date,title:'انتقال'},wasEditing=!!editingTxId;
+  if(editingTxId)state.txs=state.txs.map(t=>t.id===editingTxId?{...t,...fields}:t);else state.txs.push({id:uid(),...fields});
+  editingTxId=null;document.querySelector('#transferModal h3').textContent='🔁 انتقال بین حساب‌ها';document.querySelector('#transferModal .btn-primary').textContent='انجام انتقال ✓';save();closeModal('transferModal');renderAll();toast(wasEditing?'✏️ تغییرات انتقال ذخیره شد':'🔁 انتقال انجام شد');
 }
 
 // ---------- SMS Parser ----------
