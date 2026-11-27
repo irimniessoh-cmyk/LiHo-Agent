@@ -1,5 +1,5 @@
 'use strict';
-const CACHE_NAME = 'liho-app-shell-v27';
+const CACHE_NAME = 'liho-app-shell-v28';
 const APP_SHELL = ['./', './index.html', './manifest.webmanifest', './liho-icon.png'];
 
 self.addEventListener('install', event => {

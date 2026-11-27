@@ -1,6 +1,7 @@
 # Liho — changes prepared for GitHub
 
 ## Latest update
+- Replaced bullet-dot separators with dashes across installment cards, installment history, schedule details, and installment report rows for clearer reading.
 - Centered the PIN-setup keypad and styled savings accounts as a digital vault: no account-holder field on the card, “پس‌انداز” at the lower right, and LIHO branding at the lower left.
 - Added an on-screen numeric keypad to the PIN setup modal, matching the PIN unlock keypad; digits appear as four progress dots and can be removed with backspace.
 - Set the PIN keypad grid to left-to-right order so the top row reads 1, 2, 3 from left to right.
